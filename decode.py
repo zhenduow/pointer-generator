@@ -97,6 +97,7 @@ class BeamSearchDecoder(object):
 
       # Run beam search to get best Hypothesis
       best_hyp = beam_search.run_beam_search(self._sess, self._model, self._vocab, batch)
+      loss = best_hyp.avg_log_prob
 
       # Extract the output ids from the hypothesis and convert back to words
       output_ids = [int(t) for t in best_hyp.tokens[1:]]
@@ -111,7 +112,9 @@ class BeamSearchDecoder(object):
       decoded_output = ' '.join(decoded_words) # single string
 
       if FLAGS.single_pass:
-        self.write_for_rouge(original_abstract_sents, decoded_words, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
+          #self.write_for_rouge(original_abstract_sents, decoded_words, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
+        self.write_for_rouge_with_loss(original_abstract_sents, decoded_words, loss, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
+
         counter += 1 # this is how many examples we've decoded
       else:
         print_results(article_withunks, abstract_withunks, decoded_output) # log output to screen
@@ -158,6 +161,45 @@ class BeamSearchDecoder(object):
     with open(decoded_file, "w") as f:
       for idx,sent in enumerate(decoded_sents):
         f.write(sent) if idx==len(decoded_sents)-1 else f.write(sent+"\n")
+
+    tf.logging.info("Wrote example %i to file" % ex_index)
+
+  def write_for_rouge_with_loss(self, reference_sents, decoded_words, loss, ex_index):
+    """Write output to file in correct format for eval with pyrouge. This is called in single_pass mode.
+    This also writes loss into file for our evaluation metric.
+    Args:
+      reference_sents: list of strings
+      decoded_words: list of strings
+      ex_index: int, the index with which to label the files
+    """
+
+    # First, divide decoded output into sentences
+    decoded_sents = []
+    while len(decoded_words) > 0:
+      try:
+        fst_period_idx = decoded_words.index(".")
+      except ValueError: # there is text remaining that doesn't end in "."
+        fst_period_idx = len(decoded_words)
+      sent = decoded_words[:fst_period_idx+1] # sentence up to and including the period
+      decoded_words = decoded_words[fst_period_idx+1:] # everything else
+      decoded_sents.append(' '.join(sent))
+
+    # pyrouge calls a perl script that puts the data into HTML files.
+    # Therefore we need to make our output HTML safe.
+    decoded_sents = [make_html_safe(w) for w in decoded_sents]
+    reference_sents = [make_html_safe(w) for w in reference_sents]
+
+    # Write to file
+    ref_file = os.path.join(self._rouge_ref_dir, "%06d_reference.txt" % ex_index)
+    decoded_file = os.path.join(self._rouge_dec_dir, "%06d_decoded.txt" % ex_index)
+
+    with open(ref_file, "w") as f:
+      for idx,sent in enumerate(reference_sents):
+        f.write(sent) if idx==len(reference_sents)-1 else f.write(sent+"\n")
+    with open(decoded_file, "w") as f:
+        for idx,sent in enumerate(decoded_sents):
+            f.write(sent+"\n")
+        f.write(str(loss))
 
     tf.logging.info("Wrote example %i to file" % ex_index)
 
