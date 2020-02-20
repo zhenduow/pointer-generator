@@ -17,6 +17,7 @@
 """This file contains code to run beam search decoding, including running ROUGE evaluation and producing JSON datafiles for the in-browser attention visualizer, which can be found here https://github.com/abisee/attn_vis"""
 
 import os
+import shutil
 import time
 import tensorflow as tf
 import beam_search
@@ -58,7 +59,8 @@ class BeamSearchDecoder(object):
       ckpt_name = "ckpt-" + ckpt_path.split('-')[-1] # this is something of the form "ckpt-123456"
       self._decode_dir = os.path.join(FLAGS.log_root, get_decode_dir_name(ckpt_name))
       if os.path.exists(self._decode_dir):
-        raise Exception("single_pass decode directory %s should not already exist" % self._decode_dir)
+        shutil.rmtree(self._decode_dir)
+        #raise Exception("single_pass decode directory %s should not already exist" % self._decode_dir)
 
     else: # Generic decode dir name
       self._decode_dir = os.path.join(FLAGS.log_root, "decode")
@@ -98,6 +100,7 @@ class BeamSearchDecoder(object):
       # Run beam search to get best Hypothesis
       best_hyp = beam_search.run_beam_search(self._sess, self._model, self._vocab, batch)
       loss = best_hyp.avg_log_prob
+      perplexity = best_hyp.perplexity # adding perplexity
 
       # Extract the output ids from the hypothesis and convert back to words
       output_ids = [int(t) for t in best_hyp.tokens[1:]]
@@ -113,7 +116,7 @@ class BeamSearchDecoder(object):
 
       if FLAGS.single_pass:
           #self.write_for_rouge(original_abstract_sents, decoded_words, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
-        self.write_for_rouge_with_loss(original_abstract_sents, decoded_words, loss, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
+        self.write_for_rouge_with_perplexity(original_abstract_sents, decoded_words, perplexity, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
 
         counter += 1 # this is how many examples we've decoded
       else:
@@ -164,9 +167,9 @@ class BeamSearchDecoder(object):
 
     tf.logging.info("Wrote example %i to file" % ex_index)
 
-  def write_for_rouge_with_loss(self, reference_sents, decoded_words, loss, ex_index):
+  def write_for_rouge_with_perplexity(self, reference_sents, decoded_words, perplexity, ex_index):
     """Write output to file in correct format for eval with pyrouge. This is called in single_pass mode.
-    This also writes loss into file for our evaluation metric.
+    This also writes perplexity into file for our evaluation metric.
     Args:
       reference_sents: list of strings
       decoded_words: list of strings
@@ -199,7 +202,7 @@ class BeamSearchDecoder(object):
     with open(decoded_file, "w") as f:
         for idx,sent in enumerate(decoded_sents):
             f.write(sent+"\n")
-        f.write(str(loss))
+        f.write(str(perplexity))
 
     tf.logging.info("Wrote example %i to file" % ex_index)
 

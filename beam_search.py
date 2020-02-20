@@ -25,7 +25,7 @@ FLAGS = tf.app.flags.FLAGS
 class Hypothesis(object):
   """Class to represent a hypothesis during beam search. Holds all the information needed for the hypothesis."""
 
-  def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage):
+  def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage, perplexity):
     """Hypothesis constructor.
 
     Args:
@@ -42,8 +42,22 @@ class Hypothesis(object):
     self.attn_dists = attn_dists
     self.p_gens = p_gens
     self.coverage = coverage
+    # add perplexity for hypothesis
+    self.perplexity = perplexity
 
-  def extend(self, token, log_prob, state, attn_dist, p_gen, coverage):
+  def computepp(self, distribution):
+    '''
+    Compute perplexity using distribution
+    log
+    _prob_distribution: probability distribution
+    '''
+    pp = 0
+    for p in distribution[0]:
+      pp -= p * np.log2(p) if p != 0 else 0
+    return np.power(2,pp)
+
+
+  def extend(self, token, log_prob, state, attn_dist, p_gen, coverage, distribution):
     """Return a NEW hypothesis, extended with the information from the latest step of beam search.
 
     Args:
@@ -53,6 +67,7 @@ class Hypothesis(object):
       attn_dist: Attention distribution from latest step. Numpy array shape (attn_length).
       p_gen: Generation probability on latest step. Float.
       coverage: Latest coverage vector. Numpy array shape (attn_length), or None if not using coverage.
+      #distribution: the whole decoder step distribution
     Returns:
       New Hypothesis for next step.
     """
@@ -61,7 +76,9 @@ class Hypothesis(object):
                       state = state,
                       attn_dists = self.attn_dists + [attn_dist],
                       p_gens = self.p_gens + [p_gen],
-                      coverage = coverage)
+                      coverage = coverage,
+                      perplexity = (self.perplexity*len(self.tokens)+self.computepp(distribution))/(len(self.tokens)+1)
+                      )
 
   @property
   def latest_token(self):
@@ -101,19 +118,24 @@ def run_beam_search(sess, model, vocab, batch):
                      state=dec_in_state,
                      attn_dists=[],
                      p_gens=[],
-                     coverage=np.zeros([batch.enc_batch.shape[1]]) # zero vector of length attention_length
+                     coverage=np.zeros([batch.enc_batch.shape[1]]),
+                     perplexity = 0 # zero vector of length attention_length
                      ) for _ in xrange(FLAGS.beam_size)]
   results = [] # this will contain finished hypotheses (those that have emitted the [STOP] token)
 
   steps = 0
   while steps < FLAGS.max_dec_steps and len(results) < FLAGS.beam_size:
     latest_tokens = [h.latest_token for h in hyps] # latest token produced by each hypothesis
+
+    # Use input summarization tokens to compute the perplexity.
+    latest_tokens = batch.target_batch[:,steps]
+
     latest_tokens = [t if t in xrange(vocab.size()) else vocab.word2id(data.UNKNOWN_TOKEN) for t in latest_tokens] # change any in-article temporary OOV ids to [UNK] id, so that we can lookup word embeddings
     states = [h.state for h in hyps] # list of current decoder states of the hypotheses
     prev_coverage = [h.coverage for h in hyps] # list of coverage vectors (or None)
 
     # Run one step of the decoder to get the new info
-    (topk_ids, topk_log_probs, new_states, attn_dists, p_gens, new_coverage) = model.decode_onestep(sess=sess,
+    (topk_ids, topk_log_probs, new_states, attn_dists, prob_distribution, p_gens, new_coverage) = model.decode_onestep(sess=sess,
                         batch=batch,
                         latest_tokens=latest_tokens,
                         enc_states=enc_states,
@@ -122,6 +144,7 @@ def run_beam_search(sess, model, vocab, batch):
 
     # Extend each hypothesis and collect them all in all_hyps
     all_hyps = []
+    
     num_orig_hyps = 1 if steps == 0 else len(hyps) # On the first step, we only had one original hypothesis (the initial hypothesis). On subsequent steps, all original hypotheses are distinct.
     for i in xrange(num_orig_hyps):
       h, new_state, attn_dist, p_gen, new_coverage_i = hyps[i], new_states[i], attn_dists[i], p_gens[i], new_coverage[i]  # take the ith hypothesis and new decoder state info
@@ -132,8 +155,10 @@ def run_beam_search(sess, model, vocab, batch):
                            state=new_state,
                            attn_dist=attn_dist,
                            p_gen=p_gen,
-                           coverage=new_coverage_i)
+                           coverage=new_coverage_i,
+                           distribution = prob_distribution)
         all_hyps.append(new_hyp)
+    
 
     # Filter and collect any hypotheses that have produced the end token.
     hyps = [] # will contain hypotheses for the next step

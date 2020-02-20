@@ -281,6 +281,7 @@ class SummarizationModel(object):
       # We run decode beam search mode one decoder step at a time
       assert len(final_dists)==1 # final_dists is a singleton list containing shape (batch_size, extended_vsize)
       final_dists = final_dists[0]
+      self.final_dists = final_dists
       topk_probs, self._topk_ids = tf.nn.top_k(final_dists, hps.batch_size*2) # take the k largest probs. note batch_size=beam_size in decode mode
       self._topk_log_probs = tf.log(topk_probs)
 
@@ -405,7 +406,9 @@ class SummarizationModel(object):
       "ids": self._topk_ids,
       "probs": self._topk_log_probs,
       "states": self._dec_out_state,
-      "attn_dists": self.attn_dists
+      "attn_dists": self.attn_dists,
+      # add final distribution to return
+      "final_dists": self.final_dists
     }
 
     if FLAGS.pointer_gen:
@@ -440,7 +443,8 @@ class SummarizationModel(object):
     else:
       new_coverage = [None for _ in xrange(beam_size)]
 
-    return results['ids'], results['probs'], new_states, attn_dists, p_gens, new_coverage
+    #return results['ids'], results['probs'], new_states, attn_dists, p_gens, new_coverage
+    return results['ids'], results['probs'], new_states, attn_dists, results['final_dists'], p_gens, new_coverage
 
 
 def _mask_and_avg(values, padding_mask):
