@@ -384,6 +384,7 @@ class SummarizationModel(object):
       attn_dists: List length beam_size containing lists length attn_length.
       p_gens: Generation probabilities for this step. A list length beam_size. List of None if in baseline mode.
       new_coverage: Coverage vectors for this step. A list of arrays. List of None if coverage is not turned on.
+      # final_dists: List of length vocab_size. The distribution of the decoder step
     """
 
     beam_size = len(dec_init_states)
@@ -447,7 +448,7 @@ class SummarizationModel(object):
       new_coverage = [None for _ in xrange(beam_size)]
 
     #return results['ids'], results['probs'], new_states, attn_dists, p_gens, new_coverage
-    return results['ids'], results['probs'], new_states, attn_dists, results['final_dists'], p_gens, new_coverage
+    return results['ids'], results['probs'], new_states, attn_dists, p_gens, new_coverage, results['final_dists']
 
 
 def _mask_and_avg(values, padding_mask):

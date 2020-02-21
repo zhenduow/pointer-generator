@@ -100,8 +100,10 @@ class BeamSearchDecoder(object):
       # Run beam search to get best Hypothesis
       best_hyp = beam_search.run_beam_search(self._sess, self._model, self._vocab, batch)
       loss = best_hyp.avg_log_prob
-      perplexity = best_hyp.perplexity # adding perplexity
-
+      # perplexity = best_hyp.perplexity # get perplexity
+      sentence_prob = np.prod(best_hyp.candidate_probs) # compute the sentence multiplicative probability
+      sentence_prob = np.power(sentence_prob, 1.0/len(best_hyp.log_probs))
+    
       # Extract the output ids from the hypothesis and convert back to words
       output_ids = [int(t) for t in best_hyp.tokens[1:]]
       decoded_words = data.outputids2words(output_ids, self._vocab, (batch.art_oovs[0] if FLAGS.pointer_gen else None))
@@ -116,7 +118,7 @@ class BeamSearchDecoder(object):
 
       if FLAGS.single_pass:
           #self.write_for_rouge(original_abstract_sents, decoded_words, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
-        self.write_for_rouge_with_perplexity(original_abstract_sents, decoded_words, perplexity, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
+        self.write_for_rouge_with_metric(original_abstract_sents, decoded_words, sentence_prob, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
 
         counter += 1 # this is how many examples we've decoded
       else:
@@ -167,9 +169,9 @@ class BeamSearchDecoder(object):
 
     tf.logging.info("Wrote example %i to file" % ex_index)
 
-  def write_for_rouge_with_perplexity(self, reference_sents, decoded_words, perplexity, ex_index):
+  def write_for_rouge_with_metric(self, reference_sents, decoded_words, metric, ex_index):
     """Write output to file in correct format for eval with pyrouge. This is called in single_pass mode.
-    This also writes perplexity into file for our evaluation metric.
+    This also writes metric into file for our evaluation metric.
     Args:
       reference_sents: list of strings
       decoded_words: list of strings
@@ -202,7 +204,7 @@ class BeamSearchDecoder(object):
     with open(decoded_file, "w") as f:
         for idx,sent in enumerate(decoded_sents):
             f.write(sent+"\n")
-        f.write(str(perplexity))
+        f.write(str(metric))
 
     tf.logging.info("Wrote example %i to file" % ex_index)
 

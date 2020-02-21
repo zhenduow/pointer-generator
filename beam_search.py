@@ -25,12 +25,12 @@ FLAGS = tf.app.flags.FLAGS
 class Hypothesis(object):
   """Class to represent a hypothesis during beam search. Holds all the information needed for the hypothesis."""
 
-  def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage, perplexity):
+  def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage, candidate_probs):
     """Hypothesis constructor.
 
     Args:
-      tokens: List of integers. The ids of the tokens that form the summary so far.
-      log_probs: List, same length as tokens, of floats, giving the log probabilities of the tokens so far.
+      tokens: List of integers. The ids of the tokens that form the summary so far. The first is always [START]
+      log_probs: List, same length as tokens, of floats, giving the log probabilities of the tokens so far. The ith value is p(i+1|i), the last value is p([STOP]|last word)
       state: Current state of the decoder, a LSTMStateTuple.
       attn_dists: List, same length as tokens, of numpy arrays with shape (attn_length). These are the attention distributions so far.
       p_gens: List, same length as tokens, of floats, or None if not using pointer-generator model. The values of the generation probability so far.
@@ -42,8 +42,9 @@ class Hypothesis(object):
     self.attn_dists = attn_dists
     self.p_gens = p_gens
     self.coverage = coverage
+    self.candidate_probs = candidate_probs
     # add perplexity for hypothesis
-    self.perplexity = perplexity
+    #self.perplexity = perplexity
 
   def computepp(self, distribution):
     '''
@@ -57,7 +58,7 @@ class Hypothesis(object):
     return np.power(2,pp)
 
 
-  def extend(self, token, log_prob, state, attn_dist, p_gen, coverage, distribution):
+  def extend(self, token, log_prob, state, attn_dist, p_gen, coverage, candidate_prob):
     """Return a NEW hypothesis, extended with the information from the latest step of beam search.
 
     Args:
@@ -68,6 +69,7 @@ class Hypothesis(object):
       p_gen: Generation probability on latest step. Float.
       coverage: Latest coverage vector. Numpy array shape (attn_length), or None if not using coverage.
       #distribution: the whole decoder step distribution
+      #candidate prob: the candidate distribution
     Returns:
       New Hypothesis for next step.
     """
@@ -77,7 +79,8 @@ class Hypothesis(object):
                       attn_dists = self.attn_dists + [attn_dist],
                       p_gens = self.p_gens + [p_gen],
                       coverage = coverage,
-                      perplexity = (self.perplexity*len(self.tokens)+self.computepp(distribution))/(len(self.tokens)+1)
+                      #perplexity = (self.perplexity*len(self.tokens)+self.computepp(distribution))/(len(self.tokens)+1)
+                      candidate_probs = self.candidate_probs + [candidate_prob]
                       )
 
   @property
@@ -119,29 +122,34 @@ def run_beam_search(sess, model, vocab, batch):
                      attn_dists=[],
                      p_gens=[],
                      coverage=np.zeros([batch.enc_batch.shape[1]]),
-                     perplexity = 0 # zero vector of length attention_length
+                     #perplexity = 0 # zero vector of length attention_length
+                     candidate_probs= [1.0]
                      ) for _ in xrange(FLAGS.beam_size)]
   results = [] # this will contain finished hypotheses (those that have emitted the [STOP] token)
 
   steps = 0
   while steps < FLAGS.max_dec_steps and len(results) < FLAGS.beam_size:
-    latest_tokens = [h.latest_token for h in hyps] # latest token produced by each hypothesis
-
+    #latest_tokens = [h.latest_token for h in hyps] # latest token produced by each hypothesis
     # Use input summarization tokens to compute the perplexity.
-
-    latest_tokens = batch.target_batch[:,steps]
+    if steps == 0: # at the start, read [START] and the first word of the candidate
+      latest_tokens = [h.latest_token for h in hyps]
+    else:
+      latest_tokens = batch.target_batch[:,steps-1]
+    
+    candidate_tokens = batch.target_batch[:,steps]
 
     latest_tokens = [t if t in xrange(vocab.size()) else vocab.word2id(data.UNKNOWN_TOKEN) for t in latest_tokens] # change any in-article temporary OOV ids to [UNK] id, so that we can lookup word embeddings
+    candidate_tokens = [t if t in xrange(vocab.size()) else vocab.word2id(data.UNKNOWN_TOKEN) for t in candidate_tokens] # change any in-article temporary OOV ids to [UNK] id, so that we can lookup word embeddings
     states = [h.state for h in hyps] # list of current decoder states of the hypotheses
     prev_coverage = [h.coverage for h in hyps] # list of coverage vectors (or None)
 
     # Run one step of the decoder to get the new info
-    (topk_ids, topk_log_probs, new_states, attn_dists, prob_distribution, p_gens, new_coverage) = model.decode_onestep(sess=sess,
+    (topk_ids, topk_log_probs, new_states, attn_dists, p_gens, new_coverage, final_dists) = model.decode_onestep(sess=sess,
                         batch=batch,
                         latest_tokens=latest_tokens,
                         enc_states=enc_states,
                         dec_init_states=states,
-                        prev_coverage=prev_coverage)
+                        prev_coverage=prev_coverage,)
 
     # Extend each hypothesis and collect them all in all_hyps
     all_hyps = []
@@ -157,7 +165,9 @@ def run_beam_search(sess, model, vocab, batch):
                            attn_dist=attn_dist,
                            p_gen=p_gen,
                            coverage=new_coverage_i,
-                           distribution = prob_distribution)
+                           #distribution = prob_distribution]
+                           candidate_prob = final_dists[0,candidate_tokens[0]] # get the probability of candidate word
+                           )
         all_hyps.append(new_hyp)
     
     # Filter and collect any hypotheses that have produced the end token.
@@ -174,7 +184,7 @@ def run_beam_search(sess, model, vocab, batch):
         break
     
     steps += 1
-    if batch.target_batch[:,steps] == [1]:
+    if batch.target_batch[:,steps] == [1]: # if the next token is '[pad]', stop. The last probability is p([STOP]|the last word)
       break
 
   # At this point, either we've got beam_size results, or we've reached maximum decoder steps
