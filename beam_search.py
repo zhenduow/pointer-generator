@@ -128,6 +128,7 @@ def run_beam_search(sess, model, vocab, batch):
     latest_tokens = [h.latest_token for h in hyps] # latest token produced by each hypothesis
 
     # Use input summarization tokens to compute the perplexity.
+
     latest_tokens = batch.target_batch[:,steps]
 
     latest_tokens = [t if t in xrange(vocab.size()) else vocab.word2id(data.UNKNOWN_TOKEN) for t in latest_tokens] # change any in-article temporary OOV ids to [UNK] id, so that we can lookup word embeddings
@@ -150,7 +151,7 @@ def run_beam_search(sess, model, vocab, batch):
       h, new_state, attn_dist, p_gen, new_coverage_i = hyps[i], new_states[i], attn_dists[i], p_gens[i], new_coverage[i]  # take the ith hypothesis and new decoder state info
       for j in xrange(FLAGS.beam_size * 2):  # for each of the top 2*beam_size hyps:
         # Extend the ith hypothesis with the jth option
-        new_hyp = h.extend(token=topk_ids[i, j],
+        new_hyp = h.extend(token=latest_tokens[0],
                            log_prob=topk_log_probs[i, j],
                            state=new_state,
                            attn_dist=attn_dist,
@@ -159,7 +160,6 @@ def run_beam_search(sess, model, vocab, batch):
                            distribution = prob_distribution)
         all_hyps.append(new_hyp)
     
-
     # Filter and collect any hypotheses that have produced the end token.
     hyps = [] # will contain hypotheses for the next step
     for h in sort_hyps(all_hyps): # in order of most likely h
@@ -172,8 +172,10 @@ def run_beam_search(sess, model, vocab, batch):
       if len(hyps) == FLAGS.beam_size or len(results) == FLAGS.beam_size:
         # Once we've collected beam_size-many hypotheses for the next step, or beam_size-many complete hypotheses, stop.
         break
-
+    
     steps += 1
+    if batch.target_batch[:,steps] == [1]:
+      break
 
   # At this point, either we've got beam_size results, or we've reached maximum decoder steps
 

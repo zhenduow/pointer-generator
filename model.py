@@ -391,7 +391,10 @@ class SummarizationModel(object):
     # Turn dec_init_states (a list of LSTMStateTuples) into a single LSTMStateTuple for the batch
     cells = [np.expand_dims(state.c, axis=0) for state in dec_init_states]
     hiddens = [np.expand_dims(state.h, axis=0) for state in dec_init_states]
-    new_c = np.concatenate(cells, axis=0)  # shape [batch_size,hidden_dim]
+    try:
+      new_c = np.concatenate(cells, axis=0)  # shape [batch_size,hidden_dim]
+    except:
+      print(len(dec_init_states))
     new_h = np.concatenate(hiddens, axis=0)  # shape [batch_size,hidden_dim]
     new_dec_in_state = tf.contrib.rnn.LSTMStateTuple(new_c, new_h)
 
