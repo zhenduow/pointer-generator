@@ -184,6 +184,8 @@ def run_beam_search(sess, model, vocab, batch):
         break
     
     steps += 1
+    if steps == FLAGS.max_dec_steps:
+      break
     if batch.target_batch[:,steps] == [1]: # if the next token is '[pad]', stop. The last probability is p([STOP]|the last word)
       break
 
