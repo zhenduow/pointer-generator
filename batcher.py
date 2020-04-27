@@ -288,6 +288,25 @@ class Batcher(object):
   def fill_example_queue(self):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
 
+    def perturbation(sentences):
+      import re
+      perturbation_sentences = []
+      for summary in sentences:
+        summary = re.sub(' is ',' is not ', summary)
+        summary = re.sub(' was ',' was not ', summary)
+        summary = re.sub(' are ',' are not ', summary)
+        summary = re.sub(' were ',' were not ', summary)
+        summary = re.sub(' has ',' has not ', summary)
+        summary = re.sub(' have ',' have not ', summary)
+        summary = re.sub(' had ',' had not ', summary)
+        summary = re.sub(' will ',' will not ', summary)
+        summary = re.sub(' would ',' will not ', summary)
+        summary = re.sub(' shall ',' shall not ', summary)
+        summary = re.sub(' should ',' should not ', summary)
+        summary = re.sub(' may ',' may not ', summary)
+        perturbation_sentences.append(summary)
+      return perturbation_sentences
+
     input_gen = self.text_generator(data.example_generator(self._data_path, self._single_pass))
 
     while True:
@@ -303,6 +322,10 @@ class Batcher(object):
           raise Exception("single_pass mode is off but the example generator is out of data; error.")
 
       abstract_sentences = [sent.strip() for sent in data.abstract2sents(abstract)] # Use the <s> and </s> tags in abstract to get a list of sentences.
+      
+      # perturbation
+      abstract_sentences = perturbation(abstract_sentences)
+      
       example = Example(article, abstract_sentences, self._vocab, self._hps) # Process into an Example.
       self._example_queue.put(example) # place the Example in the example queue.
 

@@ -103,6 +103,7 @@ class BeamSearchDecoder(object):
       # perplexity = best_hyp.perplexity # get perplexity
       sentence_prob = np.prod(best_hyp.candidate_probs) # compute the sentence multiplicative probability
       sentence_prob = np.power(sentence_prob, 1.0/len(best_hyp.log_probs))
+      sentence_prob = np.log(sentence_prob) # change to log probability
     
       # Extract the output ids from the hypothesis and convert back to words
       output_ids = [int(t) for t in best_hyp.tokens[1:]]
