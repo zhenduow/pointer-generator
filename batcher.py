@@ -19,10 +19,141 @@
 import Queue
 from random import shuffle
 from threading import Thread
+import random
 import time
 import numpy as np
 import tensorflow as tf
 import data
+from copy import deepcopy
+from pattern.en import singularize
+
+from nltk.corpus import wordnet
+from nltk import word_tokenize
+import nltk
+
+
+
+grammar_tweek_negation = {
+    'is': '',
+    'Is': 'Are',
+    'was': 'were',
+    'Was': 'Were',
+    'are': 'is',
+    'Are': 'Is',
+    'were': 'was',
+    'Were': 'Was',
+    'has': 'have',
+    'Has': 'Have',
+    'have': 'has',
+    'Have ': 'Has',
+    'do': 'does',
+    'Do': 'Does',
+    'does': 'do',
+    'Does': 'Do',
+
+    'isn\'t': 'aren\'t',
+    'Isn\'t': 'Aren\'t',
+    'wasn\'t': 'weren\'t',
+    'Wasn\'t': 'Weren\'t',
+    'aren\'t': 'isn\'t',
+    'Aren\'t': 'Isn\'t',
+    'weren\'t': 'wasn\'t',
+    'Weren\'t': 'Wasn\'t',
+    'hasn\'t': 'haven\'t',
+    'Hasn\'t': 'Haven\'t',
+    'haven\'t': 'hasn\'t',
+    'Haven\'t': 'Hasn\'t',
+    'don\'t': 'doesn\'t',
+    'Don\'t': 'Doesn\'t',
+    'doesn\'t': 'don\'t',
+    'Doesn\'t': 'Don\'t',
+}
+
+
+grammar_tweek_custom = {
+
+    'on': 'in',
+    'On': 'In',
+    'in': 'on',
+    'In': 'On',
+    'at': 'in',
+    'At': 'In'
+
+}
+
+semantic_change_simple = {
+    'is': 'is not',
+    'Is': 'Is not',
+    'was': 'was not',
+    'Was': 'Was not',
+    'are': 'are not',
+    'Are': 'Are not',
+    'were': 'were not',
+    'Were': 'Were not',
+    'has': 'has not',
+    'Has': 'Has not',
+    'have': 'have not',
+    'Have ': 'Have not',
+    'had': 'had not',
+    'Had': 'Had not',
+    'do': 'do not',
+    'Do': 'Do not',
+    'does': 'does not',
+    'Does': 'Does not',
+    'can': 'can not',
+    'Can': 'Can not',
+    'could': 'could not',
+    'Could': 'Could not',
+    'will': 'will not',
+    'Will': 'Will not',
+    'would': 'would not',
+    'Would': 'Would not',
+    'should': 'should not',
+    'Should': 'Should not',
+
+    'isn\'t': 'is',
+    'Isn\'t': 'Is',
+    'wasn\'t': 'was',
+    'Wasn\'t': 'Was',
+    'aren\'t': 'are',
+    'Aren\'t': 'Are',
+    'weren\'t': 'were',
+    'Weren\'t': 'Were',
+    'hasn\'t': 'has',
+    'Hasn\'t': 'Has',
+    'haven\'t': 'have',
+    'Haven\'t': 'Have',
+    'don\'t': 'do',
+    'Don\'t': 'Do',
+    'doesn\'t': 'does',
+    'Doesn\'t': 'Does',
+    'can\'t': 'can',
+    'Can\'t': 'Can',
+    'couldn\'t': 'could',
+    'Couldn\'t': 'Could',
+    'won\'t': 'will',
+    'Won\'t': 'Will',
+    'wouldn\'t': 'would',
+    'Wouldn\'t': 'Would',
+    'shouldn\'t': 'should',
+    'Shouldn\'t': 'Should',
+}
+
+semantic_change_custom = {
+
+    'before': 'after',
+    'Before': 'After',
+    'after': 'before',
+    'After': 'Before',
+    'less': 'more',
+    'Less': 'More',
+    'more': 'less',
+    'More': 'Less',
+    'and': 'or',
+    'And': 'Or',
+    'or': 'and',
+    'Or': 'And'
+}
 
 
 class Example(object):
@@ -288,23 +419,101 @@ class Batcher(object):
   def fill_example_queue(self):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
 
-    def perturbation(sentences):
-      import re
+    def syntax_perturbation(sentences):
       perturbation_sentences = []
       for summary in sentences:
-        summary = re.sub(' is ',' is not ', summary)
-        summary = re.sub(' was ',' was not ', summary)
-        summary = re.sub(' are ',' are not ', summary)
-        summary = re.sub(' were ',' were not ', summary)
-        summary = re.sub(' has ',' has not ', summary)
-        summary = re.sub(' have ',' have not ', summary)
-        summary = re.sub(' had ',' had not ', summary)
-        summary = re.sub(' will ',' will not ', summary)
-        summary = re.sub(' would ',' will not ', summary)
-        summary = re.sub(' shall ',' shall not ', summary)
-        summary = re.sub(' should ',' should not ', summary)
-        summary = re.sub(' may ',' may not ', summary)
-        perturbation_sentences.append(summary)
+        summary = summary.split()
+        original_summary = deepcopy(summary)
+        sentence_len = len(summary)
+        done = False
+        while not done:
+            pos = random.sample(range(0, sentence_len-2), 2)
+            summary[pos[0]] = original_summary[pos[1]]
+            summary[pos[1]] = original_summary[pos[0]]
+            done = True
+            if summary == original_summary:
+                done = False
+        perturbation_sentences.append(' '.join(summary))
+      return perturbation_sentences
+
+    def semantic_perturbation(sentences):
+      perturbation_sentences = []
+      for summary in sentences:
+        summary = summary.split()
+        original_summary = deepcopy(summary)
+        tokenized_text = word_tokenize(' '.join(summary))
+        pos_tag = nltk.pos_tag(tokenized_text)
+        change = 0
+        for pi in range(len(pos_tag)):
+          antonym = ''
+          for syn in wordnet.synsets(pos_tag[pi][0]):
+            for l in syn.lemmas():
+              if l.antonyms():
+                antonym = l.antonyms()[0].name() # get the first antonym of the first lemma
+                break
+              if antonym != '':
+                tokenized_text[pi] = antonym
+                change += 1
+              if change >= 2:
+                break
+        
+          if summary == original_summary:
+            change = 0
+            for k in range(len(summary)):
+              try:
+                summary[k] = semantic_change_simple[summary[k]]
+                change += 1
+              except:
+                pass
+              if change >= 2:
+                break
+
+            summary = tokenized_text 
+            
+        perturbation_sentences.append(' '.join(summary))
+      return perturbation_sentences
+
+    def grammar_perturbation(sentences):
+      perturbation_sentences = []
+      for summary in sentences:
+        summary = summary.split()
+        original_summary = deepcopy(summary)
+        summary = []
+
+        change = 0
+        for k in range(len(summary)):
+          try:
+            summary[k] = grammar_tweek_negation[summary[k]]
+            change += 1
+          except:
+            pass
+          if change >= 2:
+            break
+        
+        if summary == original_summary:
+          change = 0
+          for k in range(len(summary)):
+            try:
+              summary[k] = grammar_tweek_custom[summary[k]]
+              change += 1
+            except:
+              pass
+            if change >= 2:
+              break
+        
+        if summary == original_summary:
+          change = 0
+          for word in original_summary:
+            new_word = singularize(word)
+            if change >= 2:
+              summary.append(word)
+            else:
+              summary.append(new_word)
+              if new_word!= word:
+                change += 1
+          
+            
+        perturbation_sentences.append(' '.join(summary))
       return perturbation_sentences
 
     input_gen = self.text_generator(data.example_generator(self._data_path, self._single_pass))
@@ -324,7 +533,7 @@ class Batcher(object):
       abstract_sentences = [sent.strip() for sent in data.abstract2sents(abstract)] # Use the <s> and </s> tags in abstract to get a list of sentences.
       
       # perturbation
-      abstract_sentences = perturbation(abstract_sentences)
+      abstract_sentences = grammar_perturbation(abstract_sentences)
       
       example = Example(article, abstract_sentences, self._vocab, self._hps) # Process into an Example.
       self._example_queue.put(example) # place the Example in the example queue.
