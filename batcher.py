@@ -420,101 +420,101 @@ class Batcher(object):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
 
     def syntax_perturbation(sentences):
-      perturbation_sentences = []
-      for summary in sentences:
-        summary = summary.split()
-        original_summary = deepcopy(summary)
-        sentence_len = len(summary)
-        done = False
-        while not done:
-            pos = random.sample(range(0, sentence_len-2), 2)
-            summary[pos[0]] = original_summary[pos[1]]
-            summary[pos[1]] = original_summary[pos[0]]
-            done = True
-            if summary == original_summary:
-                done = False
-        perturbation_sentences.append(' '.join(summary))
-      return perturbation_sentences
+      summary = ' '.join(sentences)
+      summary = summary.split()
+      original_summary = deepcopy(summary)
+      sentence_len = len(summary)
+      done = False
+      pos1 = 0
+      pos2 = -1
+      while not done:
+        pos1 += 1
+        pos2 -= 1
+        summary[pos1] = original_summary[pos2]
+        summary[pos2] = original_summary[pos1]
+        done = True
+        if summary == original_summary:
+          done = False
+      return summary
 
     def semantic_perturbation(sentences):
-      perturbation_sentences = []
-      for summary in sentences:
-        summary = summary.split()
-        original_summary = deepcopy(summary)
+      summary = ' '.join(sentences)
+      summary = summary.split()
+      original_summary = deepcopy(summary)
+      try:
         tokenized_text = word_tokenize(' '.join(summary))
-        pos_tag = nltk.pos_tag(tokenized_text)
-        change = 0
-        for pi in range(len(pos_tag)):
-          antonym = ''
+      except:
+        return sentences
+      pos_tag = nltk.pos_tag(tokenized_text)
+      change = 0
+      for pi in range(len(pos_tag)):
+        antonym = ''
+        try:
           for syn in wordnet.synsets(pos_tag[pi][0]):
             for l in syn.lemmas():
               if l.antonyms():
                 antonym = l.antonyms()[0].name() # get the first antonym of the first lemma
                 break
-              if antonym != '':
+            if antonym != '':
+              if change <2 :
                 tokenized_text[pi] = antonym
                 change += 1
-              if change >= 2:
                 break
+        except:
+          tokenized_text[pi] = '[UNK]'
         
-          if summary == original_summary:
-            change = 0
-            for k in range(len(summary)):
-              try:
-                summary[k] = semantic_change_simple[summary[k]]
-                change += 1
-              except:
-                pass
-              if change >= 2:
-                break
-
-            summary = tokenized_text 
-            
-        perturbation_sentences.append(' '.join(summary))
-      return perturbation_sentences
-
-    def grammar_perturbation(sentences):
-      perturbation_sentences = []
-      for summary in sentences:
-        summary = summary.split()
-        original_summary = deepcopy(summary)
-        summary = []
-
+      if summary == original_summary:
         change = 0
         for k in range(len(summary)):
           try:
-            summary[k] = grammar_tweek_negation[summary[k]]
+            summary[k] = semantic_change_simple[summary[k]]
+            change += 1
+          except:
+            pass
+          if change >= 2:
+            break
+
+        summary = tokenized_text 
+      
+      return summary
+
+    def grammar_perturbation(sentences):
+      summary = ' '.join(sentences)
+      summary = summary.split()
+      original_summary = deepcopy(summary)
+      change = 0
+      for k in range(len(summary)):
+        try:
+          summary[k] = grammar_tweek_negation[summary[k]]
+          change += 1
+        except:
+          pass
+        if change >= 2:
+          break
+        
+      if summary == original_summary:
+        change = 0
+        for k in range(len(summary)):
+          try:
+            summary[k] = grammar_tweek_custom[summary[k]]
             change += 1
           except:
             pass
           if change >= 2:
             break
         
-        if summary == original_summary:
-          change = 0
-          for k in range(len(summary)):
-            try:
-              summary[k] = grammar_tweek_custom[summary[k]]
+      if summary == original_summary:
+        change = 0
+        for word in original_summary:
+          new_word = singularize(word)
+          if change >= 2:
+            summary.append(word)
+          else:
+            summary.append(new_word)
+            if new_word!= word:
               change += 1
-            except:
-              pass
-            if change >= 2:
-              break
-        
-        if summary == original_summary:
-          change = 0
-          for word in original_summary:
-            new_word = singularize(word)
-            if change >= 2:
-              summary.append(word)
-            else:
-              summary.append(new_word)
-              if new_word!= word:
-                change += 1
           
-            
-        perturbation_sentences.append(' '.join(summary))
-      return perturbation_sentences
+      return summary
 
     input_gen = self.text_generator(data.example_generator(self._data_path, self._single_pass))
 
@@ -533,7 +533,7 @@ class Batcher(object):
       abstract_sentences = [sent.strip() for sent in data.abstract2sents(abstract)] # Use the <s> and </s> tags in abstract to get a list of sentences.
       
       # perturbation
-      abstract_sentences = grammar_perturbation(abstract_sentences)
+      abstract_sentences = semantic_perturbation(abstract_sentences)
       
       example = Example(article, abstract_sentences, self._vocab, self._hps) # Process into an Example.
       self._example_queue.put(example) # place the Example in the example queue.
