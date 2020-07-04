@@ -31,38 +31,26 @@ for f in sorted(irrelevant_files):
 
 print("PTGEN")
 
-
 print("original-irrelevant")
-ndcg_total = ndcg_score([[10,0]]*len(original_score),list(zip(original_score, irrelevant_score)))
+ndcg_total = ndcg_score([[1,0]]*len(original_score),list(zip(original_score, irrelevant_score)), k=1)
 print(ndcg_total)
 
 print("original-lead3")
-ndcg_total = ndcg_score([[10,3]]*len(original_score),list(zip(original_score, lead3_score)))
+ndcg_total = ndcg_score([[1,0]]*len(original_score),list(zip(original_score, lead3_score)), k=1)
 print(ndcg_total)
 
 print("original-lead3-irrelevant")
-ndcg_total = ndcg_score([[10,3,0]]*len(original_score),list(zip(original_score,lead3_score, irrelevant_score)))
+ndcg_total = ndcg_score([[1,0,0]]*len(original_score),list(zip(original_score,lead3_score, irrelevant_score)), k=1)
 print(ndcg_total)
 
 print("original-grammar-syntax-semantic")
-ndcg_total = ndcg_score([[10,9,3,1]]*len(original_score),list(zip(original_score,grammar_score,syntax_score, semantic_score)))
+ndcg_total = ndcg_score([[1,0,0,0]]*len(original_score),list(zip(original_score,grammar_score,syntax_score, semantic_score)), k =1)
 print(ndcg_total)
 
 print("original-grammar-syntax-semantic-irrelevant")
-ndcg_total = ndcg_score([[10,9,3,1,0]]*len(original_score),list(zip(original_score,grammar_score,syntax_score, semantic_score, irrelevant_score)))
+ndcg_total = ndcg_score([[1,0,0,0,0]]*len(original_score),list(zip(original_score,grammar_score,syntax_score, semantic_score, irrelevant_score)), k=1)
 print(ndcg_total)
 
-
-
-# get the proportion of each different rankings
-rankings = []
-for i in range(len(original_score)):
-    score_dict = {'original':original_score[i], 'grammar':grammar_score[i], 'syntax':syntax_score[i],'semantic':semantic_score[i]}
-    sorted_score = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)
-    rankings.append([i[0] for i in sorted_score])
-
-rankings = [r[0]+'-'+r[1]+'-'+r[2]+'-'+r[3] for r in rankings]
-print(Counter(rankings))
 
 
 

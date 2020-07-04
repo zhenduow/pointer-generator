@@ -10,4 +10,4 @@
 srun python2 run_summarization.py --mode=decode --data_path=finished_files/test.bin --vocab_path=finished_files/vocab --log_root=log --exp_name=grammar --max_enc_steps=400 --max_dec_steps=120 --coverage=1 --single_pass=1 --beam_size=1
 #srun python2 run_summarization.py --mode=decode --data_path=finished_files/test.bin --vocab_path=finished_files/vocab --log_root=log --exp_name=syntax --max_enc_steps=400 --max_dec_steps=120 --coverage=1 --single_pass=1 --beam_size=1
 #srun python2 run_summarization.py --mode=decode --data_path=finished_files/test.bin --vocab_path=finished_files/vocab --log_root=log --exp_name=semantic --max_enc_steps=400 --max_dec_steps=120 --coverage=1 --single_pass=1 --beam_size=1
-
+#srun python2 run_summarization.py --mode=decode --data_path=finished_files/test.bin --vocab_path=finished_files/vocab --log_root=log --exp_name=irrelevant --max_enc_steps=400 --max_dec_steps=120 --coverage=1 --single_pass=1 --beam_size=1

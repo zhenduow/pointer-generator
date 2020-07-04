@@ -34,7 +34,7 @@ import nltk
 
 
 grammar_tweek_negation = {
-    'is': '',
+    'is': 'are',
     'Is': 'Are',
     'was': 'were',
     'Was': 'Were',
@@ -350,7 +350,7 @@ class Batcher(object):
 
   BATCH_QUEUE_MAX = 100 # max number of batches the batch_queue can hold
 
-  def __init__(self, data_path, vocab, hps, single_pass):
+  def __init__(self, data_path, vocab, hps, single_pass, irrelevant_dict):
     """Initialize the batcher. Start threads that process the data into batches.
 
     Args:
@@ -363,6 +363,7 @@ class Batcher(object):
     self._vocab = vocab
     self._hps = hps
     self._single_pass = single_pass
+    self.irrelevant_dict = irrelevant_dict
 
     # Initialize a queue of Batches waiting to be used, and a queue of Examples waiting to be batched
     self._batch_queue = Queue.Queue(self.BATCH_QUEUE_MAX)
@@ -418,6 +419,11 @@ class Batcher(object):
 
   def fill_example_queue(self):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
+
+    def irrelevant_perturbation(sentences):
+      summary = ' '.join(sentences) + '\n'
+      irrelevant_summary = self.irrelevant_dict[summary]
+      return irrelevant_summary.split()
 
     def syntax_perturbation(sentences):
       summary = ' '.join(sentences)
@@ -529,11 +535,13 @@ class Batcher(object):
           break
         else:
           raise Exception("single_pass mode is off but the example generator is out of data; error.")
-
-      abstract_sentences = [sent.strip() for sent in data.abstract2sents(abstract)] # Use the <s> and </s> tags in abstract to get a list of sentences.
       
+      abstract_sentences = [sent.strip() for sent in data.abstract2sents(abstract)] # Use the <s> and </s> tags in abstract to get a list of sentences.
       # perturbation
-      abstract_sentences = semantic_perturbation(abstract_sentences)
+      abstract_sentences = grammar_perturbation(abstract_sentences)
+  
+      # if lead3
+      #abstract_sentences = (article.split('.')[0] + '. ' +  article.split('.')[1] + '. ' +  article.split('.')[2]+ '.').split()
       
       example = Example(article, abstract_sentences, self._vocab, self._hps) # Process into an Example.
       self._example_queue.put(example) # place the Example in the example queue.

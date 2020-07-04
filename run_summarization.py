@@ -302,7 +302,13 @@ def main(unused_argv):
   hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
 
   # Create a batcher object that will create minibatches of data
-  batcher = Batcher(FLAGS.data_path, vocab, hps, single_pass=FLAGS.single_pass)
+
+  ir_dict = {}
+  ir = open('finished_files/irrelevant_dict').readlines()
+  for k in range(len(ir)):
+    if k % 2 == 0:
+      ir_dict[ir[k]] = ir[k+1]
+  batcher = Batcher(FLAGS.data_path, vocab, hps, single_pass=FLAGS.single_pass, irrelevant_dict = ir_dict)
 
   tf.set_random_seed(111) # a seed value for randomness
 
